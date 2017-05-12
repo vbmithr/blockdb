@@ -1,0 +1,5 @@
+(executables
+ ((names (blockdb))
+  (public_names (blockdb))
+  (preprocess (pps (ppx_sexp_conv)))
+  (libraries (base stdio cmdliner hex libbitcoin blockexplorer.lwt))))
