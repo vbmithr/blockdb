@@ -20,13 +20,17 @@ let process_block hash =
       Lwt.return rawblock
   end >>= fun rawblock ->
   let { Block.header ; transactions } = Block.of_bytes_exn rawblock in
-  Lwt_log.debug_f "Processed block %s" (Hash.Hash32.show header.hash) >>= fun () ->
+  Lwt_log.debug_f "Processed block %s: %d transactions"
+    (Hash.Hash32.show header.hash) (List.length transactions.transactions) >>= fun () ->
+  Lwt_log.debug_f "%s" (Format.asprintf "%a" Block.Header.pp header) >>= fun () ->
   (* TODO: Store in DB. *)
   Lwt.return header.prev_block_hash
 
-let rec process_n_blocks n hash =
-  process_block hash >>=
-  process_n_blocks (pred n)
+let rec process_n_blocks hash = function
+  | n when n <= 0 -> Lwt.return_unit
+  | n ->
+    process_block hash >>= fun pred_block_hash ->
+    process_n_blocks pred_block_hash (pred n)
 
 let build from n =
   begin network_status ~testnet:!tn () >>= function
@@ -45,8 +49,8 @@ let build from n =
       Lwt_log.debug_f
         "Found block hash for height %d: %s" (blocks - from) hash >>= fun () ->
       Lwt.return (Hash.Hash32.of_hex_exn hash_hex)
-  end >>=
-  process_n_blocks n
+  end >>= fun block_hash ->
+  process_n_blocks block_hash n
 
 let build loglevel testnet from n =
   set_loglevel loglevel ;
@@ -60,7 +64,7 @@ let build =
     Arg.(value & (opt int 6) & info ["f" ; "from" ] ~docv:"INT" ~doc) in
   let n =
     let doc = "Number of blocks to process." in
-    Arg.(value & (opt int 10) & info ["n" ] ~docv:"INT" ~doc) in
+    Arg.(value & (opt int 1) & info ["n" ] ~docv:"INT" ~doc) in
   Term.(const build $ loglevel $ testnet $ from $ n),
   Term.info ~doc "build"
 
